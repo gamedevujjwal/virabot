@@ -20,7 +20,8 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if client.user in message.mentions:
+    if f"<@{client.user.id}>" in message.content or f"<@!{client.user.id}>" in message.content:
+
         user_message = re.sub(r"<@!?\\d+>", "", message.content).strip()
 
         if not user_message:
@@ -30,10 +31,8 @@ async def on_message(message):
         await message.channel.typing()
 
         try:
-            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-
             response = requests.post(
-                url,
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
                 headers={
                     "Content-Type": "application/json",
                     "x-goog-api-key": API_KEY
@@ -42,9 +41,7 @@ async def on_message(message):
                     "contents": [
                         {
                             "parts": [
-                                {
-                                    "text": "Your name is TEJ. Reply in English. " + user_message
-                                }
+                                {"text": user_message}
                             ]
                         }
                     ]
@@ -52,16 +49,18 @@ async def on_message(message):
             )
 
             data = response.json()
+            print("FULL RESPONSE:", data)
 
-            if "candidates" in data:
-                reply = data["candidates"][0]["content"]["parts"][0]["text"]
-            else:
-                reply = "API error 😅"
+            # ✅ correct safe parsing
+            reply = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text")
+
+            if not reply:
+                reply = "API gave empty response"
 
             await message.reply(reply)
 
         except Exception as e:
             print("ERROR:", e)
-            await message.reply("Something broke 😅")
+            await message.reply("Error 😅")
 
 client.run(TOKEN)
