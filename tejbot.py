@@ -35,7 +35,7 @@ async def on_message(message):
 
         try:
             response = requests.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
                 headers={
                     "Content-Type": "application/json",
                     "x-goog-api-key": API_KEY
