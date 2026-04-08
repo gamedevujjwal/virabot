@@ -20,6 +20,9 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    print("MESSAGE:", message.content)
+
+    # detect mention
     if f"<@{client.user.id}>" in message.content or f"<@!{client.user.id}>" in message.content:
 
         user_message = re.sub(r"<@!?\\d+>", "", message.content).strip()
@@ -32,7 +35,7 @@ async def on_message(message):
 
         try:
             response = requests.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
                 headers={
                     "Content-Type": "application/json",
                     "x-goog-api-key": API_KEY
@@ -41,7 +44,9 @@ async def on_message(message):
                     "contents": [
                         {
                             "parts": [
-                                {"text": user_message}
+                                {
+                                    "text": "Your name is TEJ. Reply in English. " + user_message
+                                }
                             ]
                         }
                     ]
@@ -49,18 +54,18 @@ async def on_message(message):
             )
 
             data = response.json()
-            print("FULL RESPONSE:", data)
+            print("API RESPONSE:", data)
 
-            # ✅ correct safe parsing
+            # safe parsing
             reply = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text")
 
             if not reply:
-                reply = "API gave empty response"
+                reply = "API error 😅"
 
             await message.reply(reply)
 
         except Exception as e:
             print("ERROR:", e)
-            await message.reply("Error 😅")
+            await message.reply("Something broke 😅")
 
 client.run(TOKEN)
