@@ -15,7 +15,7 @@ CONFIG_FILE = "config.json"
 DEFAULT_CONFIG: dict = {
     "welcome_channel": None,
     "log_channel":     None,
-    "welcome_message": "Welcome {mention} to **{guild}**! 🎉"
+    "welcome_message": "Welcome {mention} to **{guild}**!"
 }
 
 
@@ -135,50 +135,116 @@ async def on_member_remove(member: discord.Member):
     await send_log(embed)
 
 
-# ── Audit Log Tracking ─────────────────────────────────────────────────────────
+# ── Audit Log — fetch based approach ──────────────────────────────────────────
+# on_audit_log_entry_create is not stable in discord.py 2.3.2
+# Using on_member_ban / on_member_unban / on_member_update instead
+
 @bot.event
-async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
-    embed = None
+async def on_member_ban(guild: discord.Guild, user: discord.User):
+    await discord.utils.sleep_until(
+        discord.utils.utcnow() + datetime.timedelta(seconds=1)
+    )
+    reason = "No reason provided"
+    moderator = "Unknown"
+    async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.ban):
+        if entry.target.id == user.id:
+            reason    = entry.reason or "No reason provided"
+            moderator = str(entry.user) if entry.user else "Unknown"
+            break
 
-    if entry.action == discord.AuditLogAction.ban:
-        embed = discord.Embed(title="Member Banned", color=discord.Color.dark_red(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Banned User", value=f"{entry.target} (`{entry.target.id}`)" if entry.target else "Unknown", inline=False)
-        embed.add_field(name="Moderator",   value=str(entry.user) if entry.user else "Unknown", inline=False)
-        embed.add_field(name="Reason",      value=entry.reason or "No reason provided", inline=False)
+    embed = discord.Embed(title="Member Banned", color=discord.Color.dark_red(), timestamp=discord.utils.utcnow())
+    embed.add_field(name="Banned User", value=f"{user} (`{user.id}`)", inline=False)
+    embed.add_field(name="Moderator",   value=moderator,               inline=False)
+    embed.add_field(name="Reason",      value=reason,                  inline=False)
+    embed.set_footer(text="ViraBot Audit Log")
+    await send_log(embed)
 
-    elif entry.action == discord.AuditLogAction.unban:
-        embed = discord.Embed(title="Member Unbanned", color=discord.Color.green(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Unbanned User", value=f"{entry.target} (`{entry.target.id}`)" if entry.target else "Unknown", inline=False)
-        embed.add_field(name="Moderator",     value=str(entry.user) if entry.user else "Unknown", inline=False)
-        embed.add_field(name="Reason",        value=entry.reason or "No reason provided", inline=False)
 
-    elif entry.action == discord.AuditLogAction.kick:
-        embed = discord.Embed(title="Member Kicked", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Kicked User", value=f"{entry.target} (`{entry.target.id}`)" if entry.target else "Unknown", inline=False)
-        embed.add_field(name="Moderator",   value=str(entry.user) if entry.user else "Unknown", inline=False)
-        embed.add_field(name="Reason",      value=entry.reason or "No reason provided", inline=False)
+@bot.event
+async def on_member_unban(guild: discord.Guild, user: discord.User):
+    await discord.utils.sleep_until(
+        discord.utils.utcnow() + datetime.timedelta(seconds=1)
+    )
+    reason = "No reason provided"
+    moderator = "Unknown"
+    async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.unban):
+        if entry.target.id == user.id:
+            reason    = entry.reason or "No reason provided"
+            moderator = str(entry.user) if entry.user else "Unknown"
+            break
 
-    elif entry.action == discord.AuditLogAction.member_update:
-        before = entry.changes.before
-        after  = entry.changes.after
-        timed_out_before = getattr(before, "timed_out_until", None)
-        timed_out_after  = getattr(after,  "timed_out_until", None)
+    embed = discord.Embed(title="Member Unbanned", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+    embed.add_field(name="Unbanned User", value=f"{user} (`{user.id}`)", inline=False)
+    embed.add_field(name="Moderator",     value=moderator,               inline=False)
+    embed.add_field(name="Reason",        value=reason,                  inline=False)
+    embed.set_footer(text="ViraBot Audit Log")
+    await send_log(embed)
 
-        if timed_out_after and (not timed_out_before or timed_out_after > discord.utils.utcnow()):
-            embed = discord.Embed(title="Member Timed Out", color=discord.Color.yellow(), timestamp=discord.utils.utcnow())
-            embed.add_field(name="User",      value=f"{entry.target} (`{entry.target.id}`)" if entry.target else "Unknown", inline=False)
-            embed.add_field(name="Moderator", value=str(entry.user) if entry.user else "Unknown", inline=False)
-            embed.add_field(name="Until",     value=f"<t:{int(timed_out_after.timestamp())}:F>", inline=False)
-            embed.add_field(name="Reason",    value=entry.reason or "No reason provided", inline=False)
 
-        elif timed_out_before and not timed_out_after:
-            embed = discord.Embed(title="Timeout Removed", color=discord.Color.green(), timestamp=discord.utils.utcnow())
-            embed.add_field(name="User",      value=f"{entry.target} (`{entry.target.id}`)" if entry.target else "Unknown", inline=False)
-            embed.add_field(name="Moderator", value=str(entry.user) if entry.user else "Unknown", inline=False)
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    timed_out_before = before.timed_out_until
+    timed_out_after  = after.timed_out_until
 
-    if embed:
+    if timed_out_after and (not timed_out_before or timed_out_after > discord.utils.utcnow()):
+        await discord.utils.sleep_until(
+            discord.utils.utcnow() + datetime.timedelta(seconds=1)
+        )
+        moderator = "Unknown"
+        reason    = "No reason provided"
+        async for entry in after.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update):
+            if entry.target.id == after.id:
+                moderator = str(entry.user) if entry.user else "Unknown"
+                reason    = entry.reason or "No reason provided"
+                break
+
+        embed = discord.Embed(title="Member Timed Out", color=discord.Color.yellow(), timestamp=discord.utils.utcnow())
+        embed.add_field(name="User",      value=f"{after} (`{after.id}`)", inline=False)
+        embed.add_field(name="Moderator", value=moderator,                 inline=False)
+        embed.add_field(name="Until",     value=f"<t:{int(timed_out_after.timestamp())}:F>", inline=False)
+        embed.add_field(name="Reason",    value=reason,                    inline=False)
         embed.set_footer(text="ViraBot Audit Log")
         await send_log(embed)
+
+    elif timed_out_before and not timed_out_after:
+        embed = discord.Embed(title="Timeout Removed", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+        embed.add_field(name="User", value=f"{after} (`{after.id}`)", inline=False)
+        embed.set_footer(text="ViraBot Audit Log")
+        await send_log(embed)
+
+
+# ── Kick detection via audit log on member remove ──────────────────────────────
+@bot.event
+async def on_member_remove(member: discord.Member):
+    # Log: member left
+    embed_left = discord.Embed(
+        title="Member Left",
+        color=discord.Color.red(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed_left.set_thumbnail(url=member.display_avatar.url)
+    embed_left.add_field(name="User",   value=f"{member} (`{member.id}`)", inline=False)
+    embed_left.add_field(
+        name="Joined",
+        value=f"<t:{int(member.joined_at.timestamp())}:R>" if member.joined_at else "Unknown",
+        inline=False
+    )
+    embed_left.set_footer(text="ViraBot")
+    await send_log(embed_left)
+
+    # Check if it was a kick
+    await discord.utils.sleep_until(
+        discord.utils.utcnow() + datetime.timedelta(seconds=1)
+    )
+    async for entry in member.guild.audit_logs(limit=1, action=discord.AuditLogAction.kick):
+        if entry.target.id == member.id:
+            embed_kick = discord.Embed(title="Member Kicked", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
+            embed_kick.add_field(name="Kicked User", value=f"{member} (`{member.id}`)", inline=False)
+            embed_kick.add_field(name="Moderator",   value=str(entry.user) if entry.user else "Unknown", inline=False)
+            embed_kick.add_field(name="Reason",      value=entry.reason or "No reason provided", inline=False)
+            embed_kick.set_footer(text="ViraBot Audit Log")
+            await send_log(embed_kick)
+            break
 
 
 # ══════════════════════════════════════════════════════════════════════════════
