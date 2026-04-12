@@ -128,7 +128,7 @@ tree       = bot.tree
 translator = Translator()
 
 invite_cache: dict[int, dict[str, int]] = {}
-bot_ready_time = None
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  YOUTUBE POLLING
