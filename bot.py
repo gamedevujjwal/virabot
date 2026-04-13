@@ -117,15 +117,19 @@ async def send_log(embed: discord.Embed) -> None:
 
 async def find_inviter(guild: discord.Guild) -> discord.User | None:
     old_cache = invite_cache.get(guild.id, {})
+    print(f"[Invite] Old cache has {len(old_cache)} entries for {guild.name}")
     for attempt in range(3):
         await asyncio.sleep(2 + attempt * 2)
         try:
-            new_invites = await guild.fetch_invites()
+            new_invites = await guild.invites()
+            print(f"[Invite] Attempt {attempt+1}: fetched {len(new_invites)} invites")
             for inv in new_invites:
                 if inv.uses > old_cache.get(inv.code, 0):
+                    print(f"[Invite] Found: code={inv.code} inviter={inv.inviter}")
                     invite_cache[guild.id] = {i.code: i.uses for i in new_invites}
                     return inv.inviter
             invite_cache[guild.id] = {i.code: i.uses for i in new_invites}
+            print(f"[Invite] No changed invite found on attempt {attempt+1}")
         except Exception as e:
             print(f"[Invite] Attempt {attempt+1} failed: {e}")
     return None
@@ -219,10 +223,11 @@ async def on_ready():
     await tree.sync()
     for guild in bot.guilds:
         try:
-            invites = await guild.fetch_invites()
+            invites = await guild.invites()
             invite_cache[guild.id] = {inv.code: inv.uses for inv in invites}
-        except Exception:
-            pass
+            print(f"[Invites] Cached {len(invites)} invites for {guild.name}")
+        except Exception as e:
+            print(f"[Invites] Failed to cache invites for {guild.name}: {e}")
     if not check_youtube.is_running():
         check_youtube.start()
     print(f"[ViraBot] Logged in as {bot.user} (ID: {bot.user.id})")
@@ -300,7 +305,7 @@ async def on_member_remove(member: discord.Member):
             break
 
     try:
-        new_invites = await member.guild.fetch_invites()
+        new_invites = await member.guild.invites()
         invite_cache[member.guild.id] = {inv.code: inv.uses for inv in new_invites}
     except Exception:
         pass
@@ -678,8 +683,13 @@ async def translate(interaction: discord.Interaction, text: str):
 
 @tree.command(name="botinfo", description="About ViraBot.")
 async def botinfo(interaction: discord.Interaction):
+    try:
+        owner = await bot.fetch_user(1491318129501016164)
+        owner_str = f"{owner.mention} ({owner})"
+    except Exception:
+        owner_str = "<@1491318129501016164>"
     e = discord.Embed(title="ViraBot", description="The official bot of Vira Arena.", color=discord.Color.blurple(), timestamp=discord.utils.utcnow())
-    e.add_field(name="Developed by", value="@ujjwalborse09", inline=False)
+    e.add_field(name="Developed by", value=owner_str, inline=False)
     e.add_field(name="Features", value="Welcome • Logs • Levels • Invites • Translation • YouTube Feed • Autorole", inline=False)
     e.set_footer(text="ViraBot • Official")
     await interaction.response.send_message(embed=e, ephemeral=True)
